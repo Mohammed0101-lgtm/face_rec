@@ -123,7 +123,6 @@ input_b = tf.keras.layers.Input(shape=input_shape)
 processed_a = base_cnn(input_a)
 processed_b = base_cnn(input_b)
 
-# Lambda layer with tf.keras.backend for absolute difference
 dis = tf.keras.layers.Lambda(lambda x: tf.keras.backend.abs(x[0] - x[1]), output_shape=lambda x: x[0])([processed_a, processed_b])
 op = tf.keras.layers.Dense(1, activation='sigmoid')(dis)
 
