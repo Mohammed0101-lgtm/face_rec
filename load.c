@@ -1,3 +1,7 @@
+//
+// automation code for dataset loading to workspace directory
+//
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -6,39 +10,38 @@
 #include <errno.h>
 #include <limits.h>
 
-void copy_file(const char *sourcePath, const char *destinationPath) {
-    FILE *sourceFile, *destinationFile;
-    char buffer[BUFSIZ];
+void copy_file(const char *source, const char *dest) {
+    FILE*  source, *dest;
+    char   buffer[BUFSIZ];
     size_t n;
 
     // Open the source file in binary read mode
-    sourceFile = fopen(sourcePath, "rb");
-    if (sourceFile == NULL) {
+    source = fopen(source, "rb");
+    if (!source) {
         perror("Error opening source file");
         exit(EXIT_FAILURE);
     }
 
     // Open the destination file in binary write mode
-    destinationFile = fopen(destinationPath, "wb");
-    if (destinationFile == NULL) {
+    dest = fopen(dest, "wb");
+    if (!dest) {
         perror("Error opening destination file");
-        fclose(sourceFile);
+        fclose(source);
         exit(EXIT_FAILURE);
     }
 
     // Copy the contents of the source file to the destination file
-    while ((n = fread(buffer, 1, sizeof(buffer), sourceFile)) > 0) {
-        if (fwrite(buffer, 1, n, destinationFile) != n) {
+    while ((n = fread(buffer, 1, sizeof(buffer), source)) > 0) 
+        if (fwrite(buffer, 1, n, dest) != n) {
             perror("Error writing to destination file");
-            fclose(sourceFile);
+            fclose(source);
             fclose(destinationFile);
             exit(EXIT_FAILURE);
         }
-    }
 
     // Close the files
-    fclose(sourceFile);
-    fclose(destinationFile);
+    fclose(source);
+    fclose(dest);
 }
 
 void copy_dir(const char *sourceDir, const char *destDir) {
@@ -59,26 +62,28 @@ void copy_dir(const char *sourceDir, const char *destDir) {
 
     // Read entries in the source directory
     while ((entry = readdir(dir)) != NULL) {
-        char sourcePath[PATH_MAX];
-        char destPath[PATH_MAX];
+        char source[PATH_MAX];
+        char dest[PATH_MAX];
 
         // Skip "." and ".." entries
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) 
             continue;
-        }
+        
 
-        snprintf(sourcePath, sizeof(sourcePath), "%s/%s", sourceDir, entry->d_name);
-        snprintf(destPath, sizeof(destPath), "%s/%s", destDir, entry->d_name);
+        snprintf(source, sizeof(source), "%s/%s", sourceDir, entry->d_name);
+        snprintf(dest, sizeof(dest), "%s/%s", destDir, entry->d_name);
 
         struct stat entryInfo;
-        if (stat(sourcePath, &entryInfo) == -1) {
+        if (stat(source, &entryInfo) == -1) {
             perror("Error getting entry information");
             closedir(dir);
             exit(EXIT_FAILURE);
         }
 
-        if (S_ISDIR(entryInfo.st_mode)) { copyDirectory(sourcePath, destPath); }  
-        else { copyFile(sourcePath, destPath); }
+        if (S_ISDIR(entryInfo.st_mode)) 
+            copyDirectory(source, dest);   
+        else  
+            copyFile(source, dest); 
     }
 
     closedir(dir);
@@ -86,7 +91,8 @@ void copy_dir(const char *sourceDir, const char *destDir) {
 
 int main(int argc, char **argv) {
     if (argc != 3) {
-        fprintf(stderr, "Usage: %s <source directory> <destination directory>\n", argv[0]);
+        fprintf(stderr, 
+                "Usage: %s <source directory> <destination directory>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
