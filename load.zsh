@@ -1,8 +1,8 @@
 #!/bin/zsh
 
 # Define the source base directory and the destination directory
-SOURCE_BASE_DIR="/Users/mac/Downloads/imdb_crop"
-DEST_DIR="/Users/mac/python/training_dataset"
+SOURCE_BASE_DIR="Example source dir"
+DEST_DIR="Example destination dir"
 
 # Loop through the numbers 00 to 99
 for i in {00..99}; do
