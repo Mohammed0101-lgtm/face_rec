@@ -5,18 +5,18 @@ import torch.nn as nn
 import numpy as np
 import shutil
 import csv
+import matplotlib.pyplot as plt
+import copy
+import torch.multiprocessing as mp
+from sklearn.manifold import TSNE
 from PIL import Image
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
-import copy
-import matplotlib.pyplot as plt
-from sklearn.manifold import TSNE
 from tqdm import tqdm  # <-- Progress bar
-import torch.multiprocessing as mp
 
 
-mp.set_start_method("spawn", force=True)
+mp.set_start_method('spawn', force=True)
 
 positive_pairs_dir = 'positive_pairs'
 negative_pairs_dir = 'negative_pairs'
@@ -25,12 +25,11 @@ max_pairs = 1500
 res_height = 256
 res_width = 256
 input_shape = (3, res_height, res_width)
-
-model_save_path = "siamese_model.pth"
+model_save_path = 'siamese_model.pth'
 
 
 def get_negative_pairs():
-    print("Collecting negative pairs...")
+    print('Collecting negative pairs...')
     pairs = []
 
     for subdir in os.listdir(negative_pairs_dir):
@@ -47,13 +46,12 @@ def get_negative_pairs():
                 break
 
     random.shuffle(pairs)
-    print(f"Collected {len(pairs)} negative pairs.")
-    
+    print(f'Collected {len(pairs)} negative pairs.')
     return pairs
 
 
 def get_positive_pairs():
-    print("Collecting positive pairs...")
+    print('Collecting positive pairs...')
     pairs = []
     
     for subdir in os.listdir(positive_pairs_dir):
@@ -73,13 +71,12 @@ def get_positive_pairs():
                     break
     
     random.shuffle(pairs)
-    print(f"Collected {len(pairs)} positive pairs.")
-    
+    print(f'Collected {len(pairs)} positive pairs.')
     return pairs
 
 
 def get_pairs():
-    print("Creating combined dataset of positive and negative pairs...")
+    print('Creating combined dataset of positive and negative pairs...')
     
     negative_pairs = get_negative_pairs()
     positive_pairs = get_positive_pairs()
@@ -89,8 +86,8 @@ def get_pairs():
     positive_pairs = positive_pairs[:min_pairs]
     pairs = positive_pairs + negative_pairs
     labels = [1] * len(positive_pairs) + [0] * len(negative_pairs)
-    print(f"Total pairs: {len(pairs)}")
     
+    print(f'Total pairs: {len(pairs)}')
     return pairs, labels
 
 
@@ -105,23 +102,21 @@ def preprocess_image(image_path, target_size):
 
 
 def process_pairs(pairs, target_size):
-    print("Preprocessing image pairs...")
+    print('Preprocessing image pairs...')
     processed_pairs = []
     
-    for pair in tqdm(pairs, desc="Processing Pairs"):
+    for pair in tqdm(pairs, desc='Processing Pairs'):
         img1 = preprocess_image(pair[0], target_size)
         img2 = preprocess_image(pair[1], target_size)
         processed_pairs.append([img1, img2])    
     
-    print(f"Processed {len(processed_pairs)} pairs.")
-    
+    print(f'Processed {len(processed_pairs)} pairs.')
     return processed_pairs
 
 
 def _get_flattened_size(input_shape):
     dummy = torch.zeros(1, *input_shape)
     model = create_base_network()
-    
     return model(dummy).shape[1]
 
 
@@ -182,8 +177,8 @@ class SiameseDataset(Dataset):
         return self.pairs[idx][0], self.pairs[idx][1], torch.tensor(self.labels[idx], dtype=torch.float32)
 
 
-def train(model, train_loader, val_loader, num_epochs=50, patience=50):
-    print("Starting training...")
+def train(model, train_loader, val_loader, num_epochs=50, patience=15):
+    print('Starting training...')
 
     criterion = nn.BCELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -193,11 +188,11 @@ def train(model, train_loader, val_loader, num_epochs=50, patience=50):
     history = {'accuracy': [], 'val_accuracy': [], 'loss': [], 'val_loss': []}
     
     for epoch in range(num_epochs):
-        print(f"Epoch {epoch+1}/{num_epochs}")
+        print(f'Epoch {epoch+1}/{num_epochs}')
         model.train()
         train_loss, correct, total = 0, 0, 0
     
-        for a, b, label in tqdm(train_loader, desc=f"Epoch {epoch+1} - Training"):
+        for a, b, label in tqdm(train_loader, desc=f'Epoch {epoch+1} - Training'):
             optimizer.zero_grad()
 
             output = model(a, b).squeeze()
@@ -213,12 +208,12 @@ def train(model, train_loader, val_loader, num_epochs=50, patience=50):
     
         train_acc = correct / total
         train_loss /= total
-
         model.eval()
         val_loss, val_correct, val_total = 0, 0, 0
     
+        print('\nValidating...')
         with torch.no_grad():
-            for a, b, label in tqdm(val_loader, desc=f"Epoch {epoch+1} - Validation"):
+            for a, b, label in tqdm(val_loader, desc=f'Epoch {epoch+1} - Validation'):
                 output = model(a, b).squeeze()
                 loss = criterion(output, label)
                 val_loss += loss.item() * a.size(0)
@@ -234,9 +229,9 @@ def train(model, train_loader, val_loader, num_epochs=50, patience=50):
         history['loss'].append(train_loss)
         history['val_loss'].append(val_loss)
 
-        print(f"\nEpoch Summary:")
-        print(f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
-        print(f"Val Loss:   {val_loss:.4f}, Val Acc:   {val_acc:.4f}\n")
+        print(f'\nEpoch Summary:')
+        print(f'Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}')
+        print(f'Val Loss:   {val_loss:.4f}, Val Acc:   {val_acc:.4f}\n')
 
         if val_loss < best_loss:
             best_loss = val_loss
@@ -244,15 +239,16 @@ def train(model, train_loader, val_loader, num_epochs=50, patience=50):
             no_improve = 0
         else:
             no_improve += 1
+            print(f'No improvement in validation loss for {no_improve} epochs.')
     
             if no_improve >= patience:
-                print("Early stopping triggered.")
+                print('Early stopping triggered.')
                 break
     
     model.load_state_dict(best_model_wts)
     torch.save(model.state_dict(), model_save_path)
     
-    print(f"Model saved to {model_save_path}")
+    print(f'Model saved to {model_save_path}')
     
     return history
 
@@ -277,7 +273,7 @@ def visualize_predictions(model, val_dataset):
         combined.paste(img2, (res_width, 0))
         
         ax.imshow(combined)
-        ax.set_title(f"GT: {int(label)}, Pred: {prediction}")
+        ax.set_title(f'GT: {int(label)}, Pred: {prediction}')
         ax.axis('off')
     
     plt.tight_layout()
@@ -322,7 +318,7 @@ def export_embeddings(model, dataset):
     reduced = tsne.fit_transform(embeddings)
     
     plt.scatter(reduced[:, 0], reduced[:, 1], c=labels, cmap='coolwarm', alpha=0.6)
-    plt.title("t-SNE Embedding Visualization")
+    plt.title('t-SNE Embedding Visualization')
     plt.show()
 
 
@@ -336,7 +332,7 @@ if __name__ == '__main__':
     os.makedirs(positive_pairs_dir, exist_ok=True)
     os.makedirs(negative_pairs_dir, exist_ok=True)
 
-    print("Parsing CSV and preparing positive and negative pairs...")
+    print('Parsing CSV and preparing positive and negative pairs...')
 
     previous_person = None
     previous_image = None
@@ -349,35 +345,35 @@ if __name__ == '__main__':
 
         for idx, row in enumerate(reader):
             if len(row) < 3:
-                print(f"[Skipping malformed row {idx}] --> {row}")
+                print(f'[Skipping malformed row {idx}] --> {row}')
                 continue
 
             person_name, num1, num2 = row[0].strip(), row[1].strip(), row[2].strip()
             
             if not num1.isdigit() or not num2.isdigit():
-                print(f"[Skipping invalid row {idx}] --> {row}")
+                print(f'[Skipping invalid row {idx}] --> {row}')
                 continue
 
-            image1 = f"{person_name}_{int(num1):04d}.jpg"
-            image2 = f"{person_name}_{int(num2):04d}.jpg"
+            image1 = f'{person_name}_{int(num1):04d}.jpg'
+            image2 = f'{person_name}_{int(num2):04d}.jpg'
 
             src1 = os.path.join(image_base_dir, person_name, image1)
             src2 = os.path.join(image_base_dir, person_name, image2)
 
-            pos_dir = os.path.join(positive_pairs_dir, f"{person_name}_{idx}")
+            pos_dir = os.path.join(positive_pairs_dir, f'{person_name}_{idx}')
             os.makedirs(pos_dir, exist_ok=True)
 
             try:
                 shutil.copy(src1, os.path.join(pos_dir, '0.jpg'))
                 shutil.copy(src2, os.path.join(pos_dir, '1.jpg'))
             except FileNotFoundError as e:
-                print(f"[Warning] Missing positive file: {e}")
+                print(f'[Warning] Missing positive file: {e}')
 
             if previous_person is None or previous_person == person_name:
                 previous_person = person_name
                 previous_image = src1
             else:
-                neg_dir = os.path.join(negative_pairs_dir, f"{previous_person}_{person_name}_{idx}")
+                neg_dir = os.path.join(negative_pairs_dir, f'{previous_person}_{person_name}_{idx}')
                 os.makedirs(neg_dir, exist_ok=True)
             
                 try:
@@ -385,18 +381,18 @@ if __name__ == '__main__':
                     shutil.copy(src1, os.path.join(neg_dir, '1.jpg'))
                     negative_count += 1
                 except FileNotFoundError as e:
-                    print(f"[Warning] Missing negative file: {e}")
+                    print(f'[Warning] Missing negative file: {e}')
             
                 previous_person = person_name
                 previous_image = src1
 
-    print("Finished preparing positive and negative pairs.")
-    print(f"Created {negative_count} negative pairs.")
+    print('Finished preparing positive and negative pairs.')
+    print(f'Created {negative_count} negative pairs.')
 
     pairs, labels = get_pairs()
     
     if len(pairs) == 0:
-        raise ValueError("No data found.")
+        raise ValueError('No data found.')
     
     processed_pairs = process_pairs(pairs, (res_height, res_width))
     train_pairs, val_pairs, train_labels, val_labels = train_test_split(
@@ -414,4 +410,4 @@ if __name__ == '__main__':
     export_embeddings(model, val_dataset)
     plot_training_history(history)
     
-    print("✅ All steps completed successfully.")
+    print('✅ All steps completed successfully.')
